@@ -83,7 +83,7 @@ get_camera_service_name() {
 camera_systemctl() {
     expect_environment_variables_set CAMERA_NAME
     get_camera_service_name
-    systemctl enable ${CAMERA_SERVICE_NAME}@${CAMERA_NAME}.service
+    systemctl $1 ${CAMERA_SERVICE_NAME}@${CAMERA_NAME}.service
 }
 
 source_camera_env() {

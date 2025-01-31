@@ -130,6 +130,7 @@ print_instance_menu_header() {
         else
             echo "Cameras"
             for CAMERA_NAME in ${CAMERA_ARR[@]}; do
+                source_camera_env
                 SYSTEMD_STATUS=$(camera_systemctl is-active)
                 color_systemd_status
                 printf "%-35s: %s\n" "- ${CAMERA_NAME}" ${SYSTEMD_STATUS}
