@@ -1,0 +1,12 @@
+[Unit]
+Description=The snappy web interface for your 3D printer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=octavia
+EnvironmentFile=/etc/tentacles/%i_server.env
+ExecStart=/opt/octoprint/bin/octoprint serve --config=${CONFIG_FILE} --basedir=${BASE_DIR} --port=${PORT}
+
+[Install]
+WantedBy=multi-user.target

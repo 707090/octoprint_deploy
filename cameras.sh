@@ -1,308 +1,196 @@
 #!/bin/bash
 
-
-detect_camera() {
-    echo
-    echo
-    echo "Verify the camera is currently unplugged from USB....."
-    if prompt_confirm "Is the camera you are trying to detect unplugged from USB?"; then
-        readarray -t c1 < <(ls -1 /dev/v4l/by-id/*index0 2>/dev/null)
-    fi
-    dmesg -C
-    echo "Plug your camera in via USB now (detection time-out in 1 min)"
-    counter=0
-    while [[ -z "$CAM" ]] && [[ $counter -lt 60 ]]; do
-        CAM=$(dmesg | sed -n -e 's/^.*SerialNumber: //p')
-        TEMPUSBCAM=$(dmesg | sed -n -e 's|^.*input:.*/\(.*\)/input/input.*|\1|p')
-        counter=$(( $counter + 1 ))
-        if [[ -n "$TEMPUSBCAM" ]] && [[ -z "$CAM" ]]; then
-            break
-        fi
-        sleep 1
-    done
-    readarray -t c2 < <(ls -1 /dev/v4l/by-id/*index0 2>/dev/null)
-    #https://stackoverflow.com/questions/2312762
-    #TODO: what if there is more than one element?
-    BYIDCAM=(`echo ${c2[@]} ${c1[@]} | tr ' ' '\n' | sort | uniq -u `)
-    echo $BYIDCAM
-    dmesg -C
+instance_and_id_to_camera_name() {
+    expect_environment_variables_set INSTANCE CAMERA_ID
+    CAMERA_NAME="${INSTANCE}_camera_${CAMERA_ID}"
 }
 
-remove_camera() {
-    systemctl stop $1.service 
-    systemctl disable $1.service
-    rm /etc/systemd/system/$1.service 2>/dev/null
-    rm /etc/$1.env 2>/dev/null
-    sed -i "/$1/d" /etc/udev/rules.d/99-octoprint.rules
-    sed -i "/$1/d" /etc/octoprint_cameras
-    if [ "$HAPROXY" == true ]; then
-        sed -i "/use_backend $1/d" /etc/haproxy/haproxy.cfg
-        sed -i "/#$1 start/,/#$1 stop/d" /etc/haproxy/haproxy.cfg
-        systemctl restart haproxy
-    fi
+camera_name_to_instance_and_id() {
+    expect_environment_variables_set CAMERA_NAME
+    INSTANCE=$(awk -F'_camera_' '{print $1}' <<< "${CAMERA_NAME}")
+    CAMERA_ID=$(awk -F'_camera_' '{print $2}' <<< "${CAMERA_NAME}")
 }
 
-write_camera() {
-    
-    get_settings
-    if [ -z "$STREAMER" ]; then
-        STREAMER="ustreamer"
-    fi
-    
-    if [ -n "$BYIDCAM" ] && [ -z "$CAM" ] && [ -z "$TEMPUSBCAM" ]; then
-        CAMDEVICE=$BYIDCAM
+camera_exists() {
+    expect_environment_variables_set CAMERA_NAME
+    [ -f /etc/tentacles/${CAMERA_NAME}.env ]
+}
+
+get_camera_stream_url() {
+    expect_environment_variables_set CAMERA_NAME PORT
+    if haproxy_camera_rule_exists; then
+        STREAM_URL="http://localhost/${CAMERA_NAME}/?action=stream"
     else
-        CAMDEVICE=/dev/cam${INUM}_$INSTANCE
-    fi
-    OUTFILE=cam${INUM}_$INSTANCE
-    #mjpg-streamer
-    if [ "$STREAMER" == mjpg-streamer ]; then
-        cat $SCRIPTDIR/octocam_mjpg.service | \
-        sed -e "s/OCTOUSER/$OCTOUSER/" \
-        -e "s/OCTOCAM/$CAMDEVICE/" \
-        -e "s/RESOLUTION/$RESOLUTION/" \
-        -e "s/FRAMERATE/$FRAMERATE/" \
-        -e "s/CAMPORT/$CAMPORT/" > $SCRIPTDIR/cam${INUM}_$INSTANCE.service
-    fi
-    
-    #ustreamer
-    if [ "$STREAMER" == ustreamer ]; then
-        if [ "$PI" == true ]; then
-            cat $SCRIPTDIR/octocam_ustream.service | \
-            sed -e "s/OCTOUSER/$OCTOUSER/" \
-            -e "s/OCTOCAM/cam${INUM}_$INSTANCE/" \
-            -e "s|ExecStart=|ExecStart=/usr/bin/libcamerify |" > $SCRIPTDIR/$OUTFILE.service
-        else
-            cat $SCRIPTDIR/octocam_ustream.service | \
-            sed -e "s/OCTOUSER/$OCTOUSER/" \
-            -e "s/OCTOCAM/cam${INUM}_$INSTANCE/" > $SCRIPTDIR/$OUTFILE.service
-        fi
-    fi
-    
-    #camera-streamer
-    if [ "$STREAMER" == camera-streamer ]; then
-        if [ "$PI" == true ]; then
-            cat $SCRIPTDIR/picam_camstream.service | \
-            sed -e "s/OCTOUSER/$OCTOUSER/" \
-            -e "s/OCTOCAM/cam${INUM}_$INSTANCE/" > $SCRIPTDIR/$OUTFILE.service
-        else
-            cat $SCRIPTDIR/octocam_camstream.service | \
-            sed -e "s/OCTOUSER/$OCTOUSER/" \
-            -e "s/OCTOCAM/cam${INUM}_$INSTANCE/" > $SCRIPTDIR/$OUTFILE.service
-        fi
-    fi
-
-    #convert RES into WIDTH and HEIGHT for camera-streamer
-    CAMWIDTH=$(sed -r 's/^([0-9]+)x[0-9]+/\1/' <<<"$RESOLUTION")
-    CAMHEIGHT=$(sed -r 's/^[0-9]+x([0-9]+)/\1/' <<<"$RESOLUTION")
-
-    sudo -u $user echo "DEVICE=$CAMDEVICE" >> /etc/$OUTFILE.env
-    sudo -u $user echo "RES=$RESOLUTION" >> /etc/$OUTFILE.env
-    sudo -u $user echo "FRAMERATE=$FRAMERATE" >> /etc/$OUTFILE.env
-    sudo -u $user echo "PORT=$CAMPORT" >> /etc/$OUTFILE.env
-    sudo -u $user echo "WIDTH=$CAMWIDTH" >> /etc/$OUTFILE.env
-    sudo -u $user echo "HEIGHT=$CAMHEIGHT" >> /etc/$OUTFILE.env
-
-    cp $SCRIPTDIR/$OUTFILE.service /etc/systemd/system/
-    echo "camera:cam${INUM}_$INSTANCE port:$CAMPORT udev:true" >> /etc/octoprint_cameras
-    
-    #config.yaml modifications - only if INUM not set
-    if [ -z "$INUM" ]; then
-        sudo -u $user $OCTOEXEC --basedir $BASE config set plugins.classicwebcam.snapshot "http://localhost:$CAMPORT?action=snapshot"
-        
-        if [ -z "$CAMHAPROXY" ]; then
-            sudo -u $user $OCTOEXEC --basedir $BASE config set plugins.classicwebcam.stream "http://$(hostname).local:$CAMPORT?action=stream"
-        else
-            sudo -u $user $OCTOEXEC --basedir $BASE config set plugins.classicwebcam.stream "/cam_$INSTANCE/?action=stream"
-        fi
-        
-        sudo -u $user $OCTOEXEC --basedir $BASE config append_value --json system.actions "{\"action\": \"Reset video streamer\", \"command\": \"sudo systemctl restart cam_$INSTANCE\", \"name\": \"Restart webcam\"}"
-        
-        if prompt_confirm "Instance must be restarted for settings to take effect. Restart now?"; then
-            systemctl restart $INSTANCE
-        fi
-    fi
-    
-    write_cam_udev
-    
-    if [ -n "$CAMHAPROXY" ]; then
-        HAversion=$(haproxy -v | sed -n 's/^.*version \([0-9]\).*/\1/p')
-        #find frontend line, do insert
-        sed -i "/use_backend $INSTANCE if/a\        use_backend cam${INUM}_$INSTANCE if { path_beg /cam${INUM}_$INSTANCE/ }" /etc/haproxy/haproxy.cfg
-        if [ $HAversion -gt 1 ]; then
-            EXTRACAM="backend cam${INUM}_$INSTANCE\n\
-            http-request replace-path /cam${INUM}_$INSTANCE/(.*)   /|\1\n\
-            server webcam1 127.0.0.1:$CAMPORT"
-        else
-            EXTRACAM="backend cam${INUM}_$INSTANCE\n\
-            reqrep ^([^|\ :]*)|\ /cam${INUM}_$INSTANCE/(.*) |\1|\ /|\2 \n\
-            server webcam1 127.0.0.1:$CAMPORT"
-        fi
-        
-        echo "#cam${INUM}_$INSTANCE start" >> /etc/haproxy/haproxy.cfg
-        sed -i "/#cam${INUM}_$INSTANCE start/a $EXTRACAM" /etc/haproxy/haproxy.cfg
-        #these are necessary because sed append seems to have issues with escaping for the /\1
-        sed -i 's/\/|1/\/\\1/' /etc/haproxy/haproxy.cfg
-        sed -i 's/\/|2/\/\\2/' /etc/haproxy/haproxy.cfg
-        #haproxy 1.x correction
-        sed -i 's/|/\\/g' /etc/haproxy/haproxy.cfg
-        echo "#cam${INUM}_$INSTANCE stop" >> /etc/haproxy/haproxy.cfg
-        
-        systemctl restart haproxy
+        STREAM_URL="http://localhost:${PORT}/?action=stream"
     fi
 }
 
-write_cam_udev() {
-    #Either Serial number or USB port
-    #Serial Number
-    if [ -n "$CAM" ]; then
-        echo SUBSYSTEM==\"video4linux\", ATTRS{serial}==\"$CAM\", ATTR{index}==\"0\", SYMLINK+=\"cam${INUM}_$INSTANCE\" >> /etc/udev/rules.d/99-octoprint.rules
+get_camera_snapshot_url() {
+    expect_environment_variables_set CAMERA_NAME PORT
+    if haproxy_camera_rule_exists; then
+        SNAPSHOT_URL="http://localhost/${CAMERA_NAME}/?action=snapshot"
+    else
+        SNAPSHOT_URL="http://localhost:${PORT}/?action=snapshot"
     fi
-    
-    #USB port camera
-    if [ -n "$USBCAM" ]; then
-        echo SUBSYSTEM==\"video4linux\",KERNELS==\"$USBCAM\", SUBSYSTEMS==\"usb\", ATTR{index}==\"0\", DRIVERS==\"uvcvideo\", SYMLINK+=\"cam${INUM}_$INSTANCE\" >> /etc/udev/rules.d/99-octoprint.rules
-    fi
+}
+
+get_cameras_for_instance() {
+    expect_environment_variables_set INSTANCE
+    CAMERA_ARR=()
+    shopt -s nullglob
+    for camera in /etc/tentacles/${INSTANCE}_camera*.env; do
+        CAMERA_ARR+=("$(basename ${camera%.env})")
+    done
+    shopt -u nullglob
+}
+
+get_first_free_camera_id_for_instance() {
+    expect_environment_variables_set INSTANCE
+    get_cameras_for_instance
+    TAKEN_CAMERA_IDS=()
+    for CAMERA_NAME in "${CAMERA_ARR[@]}"; do
+        camera_name_to_instance_and_id
+        TAKEN_CAMERA_IDS+=("${CAMERA_ID}")
+    done
+    CAMERA_ID=0
+    while [[ " ${TAKEN_CAMERA_IDS[@]} " =~ " ${CAMERA_ID} " ]]; do
+        ((CAMERA_ID++))
+    done
+}
+
+get_camera_service_name() {
+    expect_environment_variables_set STREAMER CAMERA_TYPE
+    case "$STREAMER" in
+    "uStreamer")
+        CAMERA_SERVICE_NAME=octoprint_camera_ustreamer
+        ;;
+    "mjpeg-streamer")
+        CAMERA_SERVICE_NAME=octoprint_camera_mjpg_streamer
+        ;;
+    "camera-streamer")
+        if [[ "${CAMERA_TYPE}" == "pi" ]]; then
+            CAMERA_SERVICE_NAME=octoprint_camera_pi_camera_streamer
+        else
+            CAMERA_SERVICE_NAME=octoprint_camera_camera_streamer
+        fi
+        ;;
+    *)
+        # TODO: fatal_error? Maybe just a minor error
+        return 1
+    esac
+}
+
+camera_systemctl() {
+    expect_environment_variables_set CAMERA_NAME
+    get_camera_service_name
+    systemctl enable ${CAMERA_SERVICE_NAME}@${CAMERA_NAME}.service
+}
+
+source_camera_env() {
+    expect_environment_variables_set CAMERA_NAME
+    source /etc/tentacles/${CAMERA_NAME}.env
+}
+
+update_config_with_camera_urls() {
+    expect_environment_variables_set CAMERA_NAME PORT
+    # Set the instance for update_config based on camera name
+    camera_name_to_instance_and_id
+
+    # Update the config for this instance
+    get_camera_stream_url
+    get_camera_snapshot_url
+
+    update_config \
+        plugins.classicwebcam.snapshot=${SNAPSHOT_URL} \
+        plugins.classicwebcam.stream=${STREAM_URL}
 }
 
 add_camera() {
-    PI=$1
-    INUM=''
-    CAMHAPROX=''
-    get_settings
-    
-    if [ "$STREAMER" == none ]; then
-        echo "No camera streamer service has been installed."
-        echo "Use the utilities menu to add one."
-        main_menu
+    expect_environment_variables_set STREAMER
+
+    if [[ "${STREAMER}" == "uStreamer" ]]; then
+        _add_ustreamer_camera
+    elif [[ "${STREAMER}" == "mjpg-streamer" ]]; then
+        _add_mjpg_streamer_camera
+    elif [[ "${STREAMER}" == "camera-streamer" ]]; then
+        _add_camera_streamer_camera
+    else
+        # TODO(3): fatal error
+        return 1
     fi
 
-    if [ $SUDO_USER ]; then user=$SUDO_USER; fi
-    echo 'Adding camera' | log
-    if [ -z "$INSTANCE" ]; then
-        PS3='Select instance number to add camera to: '
-        get_instances true
-        select camopt in "${INSTANCE_ARR[@]}"
-        do
-            if [ "$camopt" == Quit ]; then
-                main_menu
-            fi
-            echo "Selected instance for camera: ${cyan}$camopt${white}"
-            INSTANCE=$camopt
-            OCTOCONFIG="/home/$user/"
-            BASE="/home/$user/.$INSTANCE"
-            OCTOUSER=$user
-            if grep -q "cam_$INSTANCE" /etc/udev/rules.d/99-octoprint.rules; then
-                echo "It appears this instance already has at least one camera."
-                if prompt_confirm "Do you want to add an additional camera for this instance?"; then
-                    echo "Enter a number for this camera."
-                    echo "Ex. entering 2 will setup a service called cam2_$INSTANCE"
-                    echo
-                    read INUM
-                    if [ -z "$INUM" ]; then
-                        echo "No value given, setting as 2"
-                        INUM='2'
-                    fi
-                else
-                    main_menu
-                fi
-            fi
-            break
-        done
+    update_config_with_camera_urls
+    camera_systemctl enable
+    camera_systemctl start
+}
+
+_add_ustreamer_camera() {
+    expect_environment_variables_set SCRIPT_DIR CAMERA_NAME CAMERA_TYPE DEVICE RESOLUTION FRAMERATE PORT
+    if ! is_ustreamer_installed; then
+        return 1
     fi
-    #for now just set a flag that we are going to write cameras behind haproxy
-    if [ "$HAPROXY" == true ]; then
-        if prompt_confirm "Add cameras to haproxy?"; then
-            CAMHAPROXY=1
-        fi
+
+    # If we are adding a PI cam, prefix the ustreamer command with libcamerafy
+    LIBCAMERAFY_BINARY_OR_EMPTY=$([[ "${CAMERA_TYPE}" == "pi" ]] && echo "/usr/bin/libcamerify" || echo "")
+    sudo -u octavia env DEVICE=${DEVICE} RESOLUTION=${RESOLUTION} FRAMERATE=${FRAMERATE} PORT=${PORT} LIBCAMERAFY_BINARY_OR_EMPTY=$LIBCAMERAFY_BINARY_OR_EMPTY CAMERA_TYPE=${CAMERA_TYPE} \
+        envsubst <${SCRIPT_DIR}/templates/octoprint_camera_ustream.env >/etc/tentacles/${CAMERA_NAME}.env
+}
+
+_add_mjpg_streamer_camera() {
+    expect_environment_variables_set SCRIPT_DIR CAMERA_NAME CAMERA_TYPE DEVICE RESOLUTION FRAMERATE PORT
+    if ! is_mjpg_streamer_installed; then
+        return 1
     fi
+
+    # TODO(0): test other camera software
+    sudo -u octavia env DEVICE=${DEVICE} RESOLUTION=${RESOLUTION} FRAMERATE=${FRAMERATE} PORT=${PORT} CAMERA_TYPE=${CAMERA_TYPE} \
+        envsubst <${SCRIPT_DIR}/templates/octoprint_camera_mjpg_stream.env >/etc/tentacles/${CAMERA_NAME}.env
+}
+
+_add_camera_streamer_camera() {
+    expect_environment_variables_set SCRIPT_DIR CAMERA_NAME CAMERA_TYPE DEVICE RESOLUTION FRAMERATE PORT
+    if ! is_camera_streamer_installed; then
+        return 1
+    fi
+    #convert RES into WIDTH and HEIGHT for camera-streamer
+    CAMWIDTH=$(sed -r 's/^([0-9]+)x[0-9]+/\1/' <<<"${RESOLUTION}")
+    CAMHEIGHT=$(sed -r 's/^[0-9]+x([0-9]+)/\1/' <<<"${RESOLUTION}")
     
-    if [ -z "$PI" ]; then
-        detect_camera
-        if [ -n "$NOSERIAL" ] && [ -n "$CAM" ]; then
-            unset CAM
+    sudo -u octavia env DEVICE=${DEVICE} WIDTH=${CAMWIDTH} HEIGHT=${CAMHEIGHT} FRAMERATE=${FRAMERATE} PORT=${PORT} CAMERA_TYPE=${CAMERA_TYPE} \
+        envsubst <${SCRIPT_DIR}/templates/octoprint_camera_camera_stream.env >/etc/tentacles/${CAMERA_NAME}.env
+}
+
+remove_camera() {
+    expect_environment_variables_set CAMERA_NAME
+    if [ -f /etc/tentacles/${CAMERA_NAME}.env ]; then
+        source_camera_env
+
+        # TODO(2): This is kind of a hack to satisfy camera_systemctl, since I am only bothering to set CAMERA_TYPE in the camera-streamer envs since its the only one that it makes a difference. This will break if I add IP cameras.
+        if [ -z "CAMERA_TYPE" ]; then
+            CAMERA_TYPE="usb"
         fi
-        #Failed state. Nothing detected
-        if [ -z "$CAM" ] && [ -z "$TEMPUSBCAM" ] && [ -z "$BYIDCAM" ]; then
-            echo
-            echo "${red}No camera was detected during the detection period.${white}"
-            echo "Try again or try a different camera."
-            
-            return
+
+        if [ -z "$STREAMER" ]; then
+            # TODO(2): add fatal_error function which make a big warning screen and closes the program
+            echo "No streamer field set in camera environment file. Cannot remove camera"
+            return 1
+        elif [ "$STREAMER" = "uStreamer" ] || [ "$STREAMER" = "mjpg-streamer" ] || [ "$STREAMER" = "camera-streamer" ]; then
+            camera_systemctl stop
+            camera_systemctl disable
+        else
+            echo "Found camera with correct instance and camera index but an unknown streamer type: $STREAMER. Will not be able to shut down systemd service, but removing anyway."
         fi
-        #only BYIDCAM
-        if [ -z "$CAM" ] && [ -z "$TEMPUSBCAM" ] && [ -n "$BYIDCAM" ]; then
-            echo "Camera was only detected as ${cyan}/dev/v4l/by-id${white} entry."
-            echo "This will be used as the camera device identifier"
-        fi
-        #only USB address
-        if [ -z "$CAM" ] && [ -n "$TEMPUSBCAM" ]; then
-            echo "${red}Camera Serial Number not detected${white}"
-            echo -e "Camera will be setup with physical USB address of ${cyan}$TEMPUSBCAM.${white}"
-            echo "The camera will have to stay plugged into this location."
-            USBCAM=$TEMPUSBCAM
-        fi
-        #serial number
-        if [ -n "$CAM" ]; then
-            echo -e "Camera detected with serial number: ${cyan}$CAM ${white}"
-            check_sn "$CAM"
-        fi
+
+        rm /etc/tentacles/${CAMERA_NAME}.env
         
+        if udev_camera_rule_exists; then
+            remove_camera_udev_rule
+        fi
+        if haproxy_camera_rule_exists; then
+            remove_haproxy_camera_rule
+        fi
     else
-        echo
-        echo
-        echo "Setting up a Pi camera service."
-        echo "Please note that mixing this setup with USB cameras may lead to issues."
-        echo "Don't expect extensive support for trying to fix these issues."
-        echo
-        echo
-    fi
-    
-    
-    CAMPORT=$(tail -1 /etc/octoprint_cameras 2>/dev/null | sed -n -e 's/^.*port:\([[:graph:]]*\) \(.*\)/\1/p')
-    
-    if [ -z "$CAMPORT" ]; then
-        CAMPORT=8000
-    fi
-    CAMPORT=$((CAMPORT+1))
-    
-    echo "Settings can be modified after initial setup in /etc/systemd/system/cam${INUM}_$INSTANCE.service"
-    echo
-    while true; do
-        echo "Camera Resolution [default: 640x480]:"
-        read RESOLUTION
-        if [ -z $RESOLUTION ]
-        then
-            RESOLUTION="640x480"
-            break
-        elif [[ $RESOLUTION =~ ^[0-9]+x[0-9]+$ ]]
-        then
-            break
-        fi
-        echo "Invalid resolution"
-    done
-    
-    echo "Selected camera resolution: $RESOLUTION" | log
-    echo "Camera Framerate (use 0 for ustreamer hardware) [default: 5]:"
-    read FRAMERATE
-    if [ -z "$FRAMERATE" ]; then
-        FRAMERATE=5
-    fi
-    echo "Selected camera framerate: $FRAMERATE" | log
-    
-    #Need to check if this is a one-off install
-    if [ -n "$camopt" ]; then
-        write_camera
-        #Pi Cam setup, replace cam_INSTANCE with /dev/video0
-        if [ -n "$PI" ] && [ "$STREAMER" == ustreamer ]; then
-            echo SUBSYSTEM==\"video4linux\", ATTRS{name}==\"video0\", SYMLINK+=\"cam${INUM}_$INSTANCE\" >> /etc/udev/rules.d/99-octoprint.rule
-        fi
-        
-        systemctl start cam${INUM}_$INSTANCE.service
-        systemctl enable cam${INUM}_$INSTANCE.service
-        systemctl daemon-reload
-        udevadm control --reload-rules
-        udevadm trigger
-        main_menu
+        camera_name_to_instance_and_id
+        echo "Could not locate camera for instance \"${INSTANCE}\" with ID ${CAMERA_ID}."
     fi
 }

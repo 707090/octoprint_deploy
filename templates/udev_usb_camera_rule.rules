@@ -1,0 +1,1 @@
+SUBSYSTEM=="video4linux",KERNELS=="${USB_ADDRESS}", SUBSYSTEMS=="usb", ATTR{index}=="0", DRIVERS=="uvcvideo", SYMLINK+="${UDEV_NAME}"

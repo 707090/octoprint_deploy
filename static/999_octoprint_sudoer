@@ -1,0 +1,2 @@
+octavia ALL=NOPASSWD: /usr/bin/systemctl
+octavia ALL=NOPASSWD: /usr/sbin/reboot
