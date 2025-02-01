@@ -280,7 +280,7 @@ is_camera_streamer_installed() {
 install_camera_streamer() {
     set -e
     expect_environment_variables_set SCRIPT_DIR
-    # Remove existing install if present
+    # Remove existing install if present 
     if [ -d /opt/camera-streamer ]; then
         rm -r /opt/camera-streamer
     fi
