@@ -147,6 +147,7 @@ _add_mjpg_streamer_camera() {
         envsubst <${SCRIPT_DIR}/templates/octoprint_camera_mjpg_stream.env | sudo -u octavia tee /etc/tentacles/${CAMERA_NAME}.env >/dev/null
 }
 
+# TODO(0): test other camera software
 _add_camera_streamer_camera() {
     expect_environment_variables_set SCRIPT_DIR CAMERA_NAME CAMERA_TYPE DEVICE RESOLUTION FRAMERATE PORT
     if ! is_camera_streamer_installed; then

@@ -101,7 +101,7 @@ create_instance_config_and_folder() {
     sudo -u octavia mkdir /usr/share/tentacles/${INSTANCE}/scripts
     sudo -u octavia mkdir /usr/share/tentacles/${INSTANCE}/timelapse
     sudo -u octavia mkdir /usr/share/tentacles/${INSTANCE}/data
-    #TODO(1): What is the generated folders for?
+    #TODO(1): What is the generated folder for?
     #TODO(1): No watched folder
 }
 
