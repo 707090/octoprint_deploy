@@ -106,7 +106,7 @@ print_instance_menu_header() {
         # Should not be possible to get here
         printf "%-35s: %s\n" "Instance ${INSTANCE}" "Does not exist"
     else
-        source /etc/tentacles/${INSTANCE}_server.env # sets CONFIG_FILE and BASE_DIR
+        source_instance_env # sets CONFIG_FILE and BASE_DIR
         SYSTEMD_STATUS=$(instance_systemctl is-active)
         color_systemd_status
         get_instance_url # sets INSTANCE_URL
@@ -150,7 +150,7 @@ print_camera_menu_header() {
         # Should not be possible to get here
         printf "%-35s: %s\n" "Camera ${CAMERA_NAME}" "Does not exist"
     else
-        source /etc/tentacles/${CAMERA_NAME}.env # sets STREAMER and CAMERA_TYPE
+        source_camera_env # sets STREAMER and CAMERA_TYPE
         SYSTEMD_STATUS=$(camera_systemctl is-active)
         color_systemd_status
         get_camera_stream_url # sets STREAM_URL
@@ -377,8 +377,6 @@ add_instance_menu() {
     fi
 
     get_unused_port 5000
-    echo Selected port is: ${PORT}
-    echo "The config for your new OctoPrint instance can be found in ${cyan}/etc/tentacles/${INSTANCE}.yaml${white}, and the server folders can be found in ${cyan}/usr/share/tentacles/${INSTANCE}/${white}"
 
     create_instance_config_and_folder
 
@@ -637,25 +635,30 @@ camera_menu() {
 
     options=()
     if haproxy_camera_rule_exists; then
-        options+=("Remove camera haproxy Config")
+        options+=("Remove camera haproxy config")
     else
-        options+=("Add camera haproxy Config")
+        options+=("Add camera haproxy config")
     fi
     options+=("Delete camera" "Return to instance menu")
 
     PS3="${green}Select operation: ${white}"
     select opt in "${options[@]}"; do
         case $opt in
-        "Add camera haproxy Config")
-            add_camera_haproxy_rule
-            if prompt_confirm "Instance must be restarted for settings to take effect. Restart now?"; then
-                instance_systemctl restart
+        "Add camera haproxy config")
+            if is_haproxy_installed; then
+                add_haproxy_camera_rule
+                if prompt_confirm "Instance must be restarted for settings to take effect. Restart now?"; then
+                    instance_systemctl restart
+                fi
+                camera_menu
+            else
+                echo "haproxy is not yet installed. Redirecting you to the install menu. You can return to this menu to add the rule after installing haproxy."
+                install_menu
             fi
-            camera_menu
             break
             ;;
-        "Remove camera haproxy Config")
-            remove_camera_haproxy_rule
+        "Remove camera haproxy config")
+            remove_haproxy_camera_rule
             if prompt_confirm "Instance must be restarted for settings to take effect. Restart now?"; then
                 instance_systemctl restart
             fi

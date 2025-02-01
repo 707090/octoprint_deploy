@@ -14,14 +14,16 @@ haproxy_camera_rule_exists() {
 }
 
 reload_haproxy() {
-    systemctl reload haproxy
+    systemctl restart haproxy
 }
 
 add_haproxy_printer_rule() {
-    echo "localhost/${INSTANCE}   ${INSTANCE}" >>/etc/tentacles/haproxy.map
+    expect_environment_variables_set INSTANCE
+    source_instance_env
+    echo "/${INSTANCE}/   ${INSTANCE}" >>/etc/tentacles/haproxy.map
 
-    sudo -u octavia env INSTANCE=${INSTANCE} PORT=${PORT} \
-        envsubst <${SCRIPT_DIR}/templates/printer_haproxy.cfg >/etc/tentacles/${INSTANCE}_haproxy.cfg
+    env INSTANCE=${INSTANCE} PORT=${PORT} \
+        envsubst <${SCRIPT_DIR}/templates/printer_haproxy.cfg | sudo -u octavia tee /etc/tentacles/${INSTANCE}_haproxy.cfg >/dev/null
 
     reload_haproxy
 }
@@ -30,15 +32,18 @@ remove_haproxy_printer_rule() {
     # remove backend
     rm /etc/tentacles/${INSTANCE}_haproxy.cfg
     # remove frontend url mapping
-    sed "/[[:space:]]${INSTANCE}[[:space:]]*$/d" /etc/tentacles/haproxy.map
+    sed "/[[:space:]]${INSTANCE}[[:space:]]*$/d" /etc/tentacles/haproxy.map > /etc/tentacles/haproxy.map.tmp
+    mv /etc/tentacles/haproxy.map.tmp /etc/tentacles/haproxy.map
 
     reload_haproxy
 }
 
 add_haproxy_camera_rule() {
-    sudo -u octavia env CAMERA_NAME=${CAMERA_NAME} PORT=${PORT} \
-        envsubst <${SCRIPT_DIR}/templates/camera_haproxy.cfg >/etc/tentacles/${CAMERA_NAME}_haproxy.cfg
-    echo "localhost/${CAMERA_NAME}   ${CAMERA_NAME}" >>/etc/tentacles/haproxy.map
+    expect_environment_variables_set
+    source_camera_env
+    env CAMERA_NAME=${CAMERA_NAME} PORT=${PORT} \
+        envsubst <${SCRIPT_DIR}/templates/camera_haproxy.cfg | sudo -u octavia tee /etc/tentacles/${CAMERA_NAME}_haproxy.cfg >/dev/null
+    echo "/${CAMERA_NAME}/   ${CAMERA_NAME}" >>/etc/tentacles/haproxy.map
 
     reload_haproxy
 
@@ -50,7 +55,8 @@ remove_haproxy_camera_rule() {
     # remove backend
     rm /etc/tentacles/${CAMERA_NAME}_haproxy.cfg
     # remove frontend url mapping
-    sed "/[[:space:]]${CAMERA_NAME}[[:space:]]*$/d" /etc/tentacles/haproxy.map
+    sed "/[[:space:]]${CAMERA_NAME}[[:space:]]*$/d" /etc/tentacles/haproxy.map > /etc/tentacles/haproxy.map.tmp
+    mv /etc/tentacles/haproxy.map.tmp /etc/tentacles/haproxy.map
 
     reload_haproxy
 

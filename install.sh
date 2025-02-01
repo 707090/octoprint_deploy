@@ -23,7 +23,7 @@ create_tentacles_user() {
 remove_tentacles_user() {
     rm /etc/sudoers.d/999_octoprint_sudoer
 
-    userdel octaviaoctoprint1
+    userdel octavia
     groupdel octoprinters
 }
 
@@ -81,6 +81,8 @@ install_tentacles() {
     sudo -u octavia mkdir /usr/share/tentacles/shared/virtualSd
 
     sudo -u octavia touch /etc/tentacles/users.yaml
+    # TODO(0): Use the octoprint_deploy admin-setting script
+    prompt_confirm "Copy over the user file"
 
     cp ${SCRIPT_DIR}/static/octoprint_server@.service /etc/systemd/system/
     systemctl daemon-reload
@@ -107,18 +109,21 @@ uninstall_tentacles() {
         uninstall_camera_streamer
     fi
 
+
     rm /etc/systemd/system/octoprint_server@.service
     systemctl daemon-reload
 
     rm -r /etc/tentacles/
     rm -r /usr/share/tentacles/
 
+    rm /etc/udev/rules.d/99-octoprint.rules 
+
     uninstall_octoprint
     remove_tentacles_user
 }
 
 is_haproxy_installed() {
-    [ -n $(which haproxy) ] && [ -d /etc/haproxy/haproxy.cfg.d ] && [ -f /etc/systemd/system/haproxy.service.d/haproxy_sytemd_octoprint_override.conf ]
+    [ -n $(which haproxy) ] && [ -d /etc/haproxy/haproxy.cfg.d ] && [ -f /etc/systemd/system/haproxy.service.d/haproxy_systemd_octoprint_override.conf ]
 }
 
 # TODO(3): make HAProxy run separate in systemd so its dedicated
@@ -128,16 +133,16 @@ install_haproxy() {
     
     expect_environment_variables_set SCRIPT_DIR
 
-    mkdir /etc/haproxy/haproxy.cfg.d
-    ln -s /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.d/haproxy_orignial.cfg
+    mkdir -p /etc/haproxy/haproxy.cfg.d
+    ln -sf /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.d/haproxy_original.cfg
 
-    cp ${SCRIPT_DIR}/static/0_haproxy_frontend.cfg /etc/tentacles/
-    chown octavia:octoprinters /etc/tentacles/0_haproxy_frontend.cfg
+    cp ${SCRIPT_DIR}/static/haproxy_frontend.cfg /etc/tentacles/
+    chown octavia:octoprinters /etc/tentacles/haproxy_frontend.cfg
     sudo -u octavia touch /etc/tentacles/haproxy.map 
     
 
     mkdir -p /etc/systemd/system/haproxy.service.d/
-    cp ${SCRIPT_DIR}/static/haproxy_sytemd_octoprint_override.conf /etc/systemd/system/haproxy.service.d/
+    cp ${SCRIPT_DIR}/static/haproxy_systemd_octoprint_override.conf /etc/systemd/system/haproxy.service.d/
     systemctl daemon-reload
 
     systemctl enable haproxy
@@ -153,17 +158,17 @@ uninstall_haproxy() {
             remove_haproxy_printer_rule
         fi
         get_cameras_for_instance
-        for camera in ${CAMERA_ARR[@]}; do
-            remove_camera_haproxy_rule
+        for CAMERA_NAME in ${CAMERA_ARR[@]}; do
+            remove_haproxy_camera_rule
         done
     done
 
     rm -r /etc/haproxy/haproxy.cfg.d
 
-    rm /etc/tentacles/0_haproxy_frontend.cfg
+    rm /etc/tentacles/haproxy_frontend.cfg
     rm /etc/tentacles/haproxy.map 
 
-    rm /etc/systemd/system/haproxy.service.d/haproxy_sytemd_octoprint_override.conf
+    rm /etc/systemd/system/haproxy.service.d/haproxy_systemd_octoprint_override.conf
     systemctl daemon-reload
 
     systemctl stop haproxy
@@ -242,7 +247,7 @@ install_mjpg_streamer() {
     set -e
     expect_environment_variables_set SCRIPT_DIR
     # Remove existing install if present
-    if [ -d /opt/mjpg_streamer]; then
+    if [ -d /opt/mjpg_streamer ]; then
         rm -r /opt/mjpg_streamer
     fi
     git -C /opt/ clone https://github.com/jacksonliam/mjpg-streamer.git mjpeg

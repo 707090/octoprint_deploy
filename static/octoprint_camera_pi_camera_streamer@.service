@@ -6,7 +6,7 @@ StartLimitBurst=10
 
 [Service]
 User=octavia
-EnvironmentFile=/etc/tentacles/%i_camera_stream.env
+EnvironmentFile=/etc/tentacles/%i.env
 ExecCondition=/bin/sh -c "/usr/bin/libcamera-hello --list-cameras | grep -o '/base/soc/[^)]*'"
 ExecCondition=/bin/sh -c "! ss -ltn src :${PORT} | grep -q LISTEN"
 ExecStart=/bin/sh -c "exec /usr/bin/camera-streamer \

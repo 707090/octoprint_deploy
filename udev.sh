@@ -8,15 +8,8 @@ camera_udev_name() {
     echo "octo_${CAMERA_NAME}"
 }
 
-check_udev_setup() {
-    [ ! -f /etc/udev/rules.d/99-octoprint.rules ]
-}
-
-setup_tentacles_udev() {
-    expect_environment_variables_set SCRIPT_DIR
-    cp ${SCRIPT_DIR}/static/99-octoprint.rules /etc/udev/rules.d/
-
-    reload_udev
+is_udev_setup() {
+    [ -f /etc/udev/rules.d/99-octoprint.rules ]
 }
 
 verify_no_duplicate_printer_serial_numbers() {
@@ -48,6 +41,9 @@ verify_no_duplicate_camera_serial_numbers() {
 }
 
 reload_udev() {
+    shopt -s nullglob
+    cat /etc/tentacles/*.rules > /etc/udev/rules.d/99-octoprint.rules
+    shopt -u nullglob
     udevadm control --reload-rules
     udevadm trigger
 }
@@ -59,8 +55,8 @@ udev_printer_rule_exists() {
 
 add_serial_number_printer_udev_rule() {
     expect_environment_variables_set SCRIPT_DIR INSTANCE SERIAL_NUMBER
-    sudo -u octavia env SERIAL_NUMBER=$SERIAL_NUMBER UDEV_NAME=$(printer_udev_name) \
-        envsubst <${SCRIPT_DIR}/templates/udev_serial_number_printer_rule.rules >/etc/tentacles/${INSTANCE}_printer_udev.rules
+    env SERIAL_NUMBER=$SERIAL_NUMBER UDEV_NAME=$(printer_udev_name) \
+        envsubst <${SCRIPT_DIR}/templates/udev_serial_number_printer_rule.rules | sudo -u octavia tee /etc/tentacles/${INSTANCE}_printer_udev.rules >/dev/null
 
     # Update config for the instance
     # TODO: removing all other additional ports and resetting the array might be questionable
@@ -74,8 +70,8 @@ add_serial_number_printer_udev_rule() {
 add_usb_printer_udev_rule() {
     echo "Adding printer with ${SCRIPT_DIR} $INSTANC2E $USB_ADDRESS"
     expect_environment_variables_set SCRIPT_DIR INSTANCE USB_ADDRESS
-    sudo -u octavia env USB_ADDRESS=$USB_ADDRESS UDEV_NAME=$(printer_udev_name) \
-        envsubst <${SCRIPT_DIR}/templates/udev_usb_printer_rule.rules >/etc/tentacles/${INSTANCE}_printer_udev.rules
+    env USB_ADDRESS=$USB_ADDRESS UDEV_NAME=$(printer_udev_name) \
+        envsubst <${SCRIPT_DIR}/templates/udev_usb_printer_rule.rules | sudo -u octavia tee /etc/tentacles/${INSTANCE}_printer_udev.rules >/dev/null
 
     # Update config for the instance
     update_config \
@@ -97,16 +93,16 @@ udev_camera_rule_exists() {
 
 add_serial_number_camera_udev_rule() {
     expect_environment_variables_set SCRIPT_DIR CAMERA_NAME SERIAL_NUMBER
-    sudo -u octavia env SERIAL_NUMBER=$SERIAL_NUMBER UDEV_NAME=$(camera_udev_name) \
-        envsubst <${SCRIPT_DIR}/templates/udev_serial_number_camera_rule.rules >/etc/tentacles/${CAMERA_NAME}_udev.rules
+    env SERIAL_NUMBER=$SERIAL_NUMBER UDEV_NAME=$(camera_udev_name) \
+        envsubst <${SCRIPT_DIR}/templates/udev_serial_number_camera_rule.rules | sudo -u octavia tee /etc/tentacles/${CAMERA_NAME}_udev.rules >/dev/null
 
     reload_udev
 }
 
 add_usb_camera_udev_rule() {
     expect_environment_variables_set SCRIPT_DIR CAMERA_NAME USBCAM
-    sudo -u octavia env USB_ADDRESS=$USBCAM UDEV_NAME=$(camera_udev_name) \
-        envsubst <${SCRIPT_DIR}/templates/udev_serial_number_camera_rule.rules >/etc/tentacles/${CAMERA_NAME}_udev.rules
+    env USB_ADDRESS=$USBCAM UDEV_NAME=$(camera_udev_name) \
+        envsubst <${SCRIPT_DIR}/templates/udev_serial_number_camera_rule.rules | sudo -u octavia tee /etc/tentacles/${CAMERA_NAME}_udev.rules >/dev/null
 
     reload_udev
 }

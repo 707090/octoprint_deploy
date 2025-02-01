@@ -4,14 +4,14 @@ After=network.target
 
 [Service]
 User=octavia
-EnvironmentFile=/etc/tentacles/%i_camera_stream.env
+EnvironmentFile=/etc/tentacles/%i.env
 ExecStart=/opt/camera-streamer/camera-streamer \
   --camera-path=${DEVICE} \
   --camera-format=JPEG \
   --camera-width=${WIDTH} -camera-height=${HEIGHT} \
   --camera-fps=${FRAMERATE} \
   --camera-nbufs=3 \
-  --http-listen=0.0.0.0 \
+  --http-listen=localhost \
   --http-port=${PORT} \
   --camera-video.disabled
 

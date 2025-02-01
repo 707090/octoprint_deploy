@@ -5,8 +5,8 @@ Wants=network.online.target
 
 [Service]
 User=octavia
-EnvironmentFile=/etc/tentacles/%i_ustream.env
-ExecStart=/bin/sh -c "${LIBCAMERAFY_BINARY_OR_EMPTY} /opt/ustreamer/ustreamer -d ${DEVICE} -s $(hostname) -m MJPEG -r ${RESOLUTION} -f ${FRAMERATE} -p ${PORT} --device-timeout 8 --device-error-delay 8"
+EnvironmentFile=/etc/tentacles/%i.env
+ExecStart=/bin/sh -c "${LIBCAMERAFY_BINARY_OR_EMPTY} /opt/ustreamer/ustreamer -d ${DEVICE} -s localhost -m MJPEG -r ${RESOLUTION} -f ${FRAMERATE} -p ${PORT} --device-timeout 8 --device-error-delay 8"
 
 [Install]
 WantedBy=multi-user.target

@@ -7,6 +7,10 @@ instance_exists() {
     [ -f "/etc/tentacles/${INSTANCE}_server.env" ]
 }
 
+source_instance_env() {
+    source /etc/tentacles/${INSTANCE}_server.env
+}
+
 get_instances() {
     INSTANCE_ARR=()
     shopt -s nullglob
@@ -49,8 +53,8 @@ import_standard_instance() {
     # TODO(2): Once there is a feature to only fill fields if they are empty, use that to fill default config
 
     # Write environment file
-    sudo -u octavia env INSTANCE=${INSTANCE} PORT=${PORT} \
-        envsubst <${SCRIPT_DIR}/templates/octoprint_tentacle.env >/etc/tentacles/${INSTANCE}_server.env
+    env INSTANCE=${INSTANCE} PORT=${PORT} \
+        envsubst <${SCRIPT_DIR}/templates/octoprint_tentacle.env | sudo -u octavia tee /etc/tentacles/${INSTANCE}_server.env >/dev/null
 
     # Create symlinks to directories which should be shared across all instances
     sudo -u octavia mkdir -p /usr/share/tentacles/${INSTANCE}
@@ -81,8 +85,8 @@ create_instance_config_and_folder() {
         webcam.ffmpeg=/usr/bin/ffmpeg
 
     # Write environment file
-    sudo -u octavia env INSTANCE=${INSTANCE} PORT=${PORT} \
-        envsubst <${SCRIPT_DIR}/templates/octoprint_tentacle.env >/etc/tentacles/${INSTANCE}_server.env
+    env INSTANCE=${INSTANCE} PORT=${PORT} \
+        envsubst <${SCRIPT_DIR}/templates/octoprint_tentacle.env | sudo -u octavia tee /etc/tentacles/${INSTANCE}_server.env >/dev/null
 
     # Create symlinks to directories which should be shared across all instances
     sudo -u octavia mkdir -p /usr/share/tentacles/${INSTANCE}
@@ -111,8 +115,8 @@ remove_instance() {
     #Get all cameras associated with this instance.
     #Is this right?
     get_cameras_for_instance
-    for camera in "${CAMERA_ARR[@]}"; do
-        remove_camera $camera
+    for CAMERA_NAME in "${CAMERA_ARR[@]}"; do
+        remove_camera
     done
 
     rm /etc/tentacles/${INSTANCE}.yaml

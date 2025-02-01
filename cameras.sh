@@ -64,7 +64,7 @@ get_camera_service_name() {
     "uStreamer")
         CAMERA_SERVICE_NAME=octoprint_camera_ustreamer
         ;;
-    "mjpeg-streamer")
+    "mjpg-streamer")
         CAMERA_SERVICE_NAME=octoprint_camera_mjpg_streamer
         ;;
     "camera-streamer")
@@ -132,8 +132,8 @@ _add_ustreamer_camera() {
 
     # If we are adding a PI cam, prefix the ustreamer command with libcamerafy
     LIBCAMERAFY_BINARY_OR_EMPTY=$([[ "${CAMERA_TYPE}" == "pi" ]] && echo "/usr/bin/libcamerify" || echo "")
-    sudo -u octavia env DEVICE=${DEVICE} RESOLUTION=${RESOLUTION} FRAMERATE=${FRAMERATE} PORT=${PORT} LIBCAMERAFY_BINARY_OR_EMPTY=$LIBCAMERAFY_BINARY_OR_EMPTY CAMERA_TYPE=${CAMERA_TYPE} \
-        envsubst <${SCRIPT_DIR}/templates/octoprint_camera_ustream.env >/etc/tentacles/${CAMERA_NAME}.env
+    env DEVICE=${DEVICE} RESOLUTION=${RESOLUTION} FRAMERATE=${FRAMERATE} PORT=${PORT} LIBCAMERAFY_BINARY_OR_EMPTY=$LIBCAMERAFY_BINARY_OR_EMPTY CAMERA_TYPE=${CAMERA_TYPE} \
+        envsubst <${SCRIPT_DIR}/templates/octoprint_camera_ustream.env | sudo -u octavia tee /etc/tentacles/${CAMERA_NAME}.env >/dev/null
 }
 
 _add_mjpg_streamer_camera() {
@@ -143,8 +143,8 @@ _add_mjpg_streamer_camera() {
     fi
 
     # TODO(0): test other camera software
-    sudo -u octavia env DEVICE=${DEVICE} RESOLUTION=${RESOLUTION} FRAMERATE=${FRAMERATE} PORT=${PORT} CAMERA_TYPE=${CAMERA_TYPE} \
-        envsubst <${SCRIPT_DIR}/templates/octoprint_camera_mjpg_stream.env >/etc/tentacles/${CAMERA_NAME}.env
+    env DEVICE=${DEVICE} RESOLUTION=${RESOLUTION} FRAMERATE=${FRAMERATE} PORT=${PORT} CAMERA_TYPE=${CAMERA_TYPE} \
+        envsubst <${SCRIPT_DIR}/templates/octoprint_camera_mjpg_stream.env | sudo -u octavia tee /etc/tentacles/${CAMERA_NAME}.env >/dev/null
 }
 
 _add_camera_streamer_camera() {
@@ -156,8 +156,8 @@ _add_camera_streamer_camera() {
     CAMWIDTH=$(sed -r 's/^([0-9]+)x[0-9]+/\1/' <<<"${RESOLUTION}")
     CAMHEIGHT=$(sed -r 's/^[0-9]+x([0-9]+)/\1/' <<<"${RESOLUTION}")
     
-    sudo -u octavia env DEVICE=${DEVICE} WIDTH=${CAMWIDTH} HEIGHT=${CAMHEIGHT} FRAMERATE=${FRAMERATE} PORT=${PORT} CAMERA_TYPE=${CAMERA_TYPE} \
-        envsubst <${SCRIPT_DIR}/templates/octoprint_camera_camera_stream.env >/etc/tentacles/${CAMERA_NAME}.env
+    env DEVICE=${DEVICE} WIDTH=${CAMWIDTH} HEIGHT=${CAMHEIGHT} FRAMERATE=${FRAMERATE} PORT=${PORT} CAMERA_TYPE=${CAMERA_TYPE} \
+        envsubst <${SCRIPT_DIR}/templates/octoprint_camera_camera_stream.env | sudo -u octavia tee /etc/tentacles/${CAMERA_NAME}.env >/dev/null
 }
 
 remove_camera() {
