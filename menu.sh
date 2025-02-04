@@ -730,7 +730,7 @@ install_menu() {
         printf "%-20s: %s\n" "HAProxy" "Not installed"
         options+=("Install HAProxy")
     fi
-    if ! is_ustreamer_installed && ! is_mjpg_streamer_installed && ! is_camera_streamer_installed; then
+    if ! is_ustreamer_installed && ! is_mjpg_streamer_installed; then
         printf "%-20s: %s\n" "Camera Streamers" "None"
     else
         printf "%-20s: %s\n" "Camera Streamers"
@@ -746,12 +746,6 @@ install_menu() {
         options+=("Uninstall mjpg-streamer")
     else
         options+=("Install mjpg-streamer")
-    fi
-    if is_camera_streamer_installed; then
-        printf "%-20s: %s\n" "- camera-streamer" "/opt/camera_streamer"
-        options+=("Uninstall camera-streamer")
-    else
-        options+=("Install camera-streamer")
     fi
 
     echo
@@ -795,20 +789,6 @@ install_menu() {
             ;;
         "Uninstall mjpg-streamer")
             uninstall_mjpg_streamer
-            break
-            ;;
-        "Install camera-streamer")
-            install_camera_streamer
-            if is_ustreamer_installed; then
-                echo "camera-streamer installed successfully"
-            else
-                echo "${red}WARNING! WARNING! WARNING!${white}"
-                echo "camera-streamer has not been installed correctly."
-            fi
-            break
-            ;;
-        "Uninstall camera-streamer")
-            uninstall_camera_streamer
             break
             ;;
         "Return to main menu")

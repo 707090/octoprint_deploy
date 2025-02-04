@@ -105,9 +105,6 @@ uninstall_tentacles() {
     if is_mjpg_streamer_installed; then
         uninstall_mjpg_streamer
     fi
-    if is_camera_streamer_installed; then
-        uninstall_camera_streamer
-    fi
 
 
     rm /etc/systemd/system/octoprint_server@.service
