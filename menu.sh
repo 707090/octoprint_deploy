@@ -529,7 +529,7 @@ add_camera_menu() {
     PS3="${green}Select a video streamer to provide the camera feed: ${white}"
     select opt in "${options[@]}"; do
         case $opt in
-        "uStreamer"|"mjpg-streamer"|"camera-streamer")
+        "uStreamer"|"mjpg-streamer")
             STREAMER=$opt
             break
             ;;

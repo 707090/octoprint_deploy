@@ -67,13 +67,6 @@ get_camera_service_name() {
     "mjpg-streamer")
         CAMERA_SERVICE_NAME=octoprint_camera_mjpg_streamer
         ;;
-    "camera-streamer")
-        if [[ "${CAMERA_TYPE}" == "pi" ]]; then
-            CAMERA_SERVICE_NAME=octoprint_camera_pi_camera_streamer
-        else
-            CAMERA_SERVICE_NAME=octoprint_camera_camera_streamer
-        fi
-        ;;
     *)
         # TODO: fatal_error? Maybe just a minor error
         return 1
@@ -142,23 +135,8 @@ _add_mjpg_streamer_camera() {
         return 1
     fi
 
-    # TODO(0): test other camera software
     env DEVICE=${DEVICE} RESOLUTION=${RESOLUTION} FRAMERATE=${FRAMERATE} PORT=${PORT} CAMERA_TYPE=${CAMERA_TYPE} \
         envsubst <${SCRIPT_DIR}/templates/octoprint_camera_mjpg_stream.env | sudo -u octavia tee /etc/tentacles/${CAMERA_NAME}.env >/dev/null
-}
-
-# TODO(0): test other camera software
-_add_camera_streamer_camera() {
-    expect_environment_variables_set SCRIPT_DIR CAMERA_NAME CAMERA_TYPE DEVICE RESOLUTION FRAMERATE PORT
-    if ! is_camera_streamer_installed; then
-        return 1
-    fi
-    #convert RES into WIDTH and HEIGHT for camera-streamer
-    CAMWIDTH=$(sed -r 's/^([0-9]+)x[0-9]+/\1/' <<<"${RESOLUTION}")
-    CAMHEIGHT=$(sed -r 's/^[0-9]+x([0-9]+)/\1/' <<<"${RESOLUTION}")
-    
-    env DEVICE=${DEVICE} WIDTH=${CAMWIDTH} HEIGHT=${CAMHEIGHT} FRAMERATE=${FRAMERATE} PORT=${PORT} CAMERA_TYPE=${CAMERA_TYPE} \
-        envsubst <${SCRIPT_DIR}/templates/octoprint_camera_camera_stream.env | sudo -u octavia tee /etc/tentacles/${CAMERA_NAME}.env >/dev/null
 }
 
 remove_camera() {
@@ -175,7 +153,7 @@ remove_camera() {
             # TODO(2): add fatal_error function which make a big warning screen and closes the program
             echo "No streamer field set in camera environment file. Cannot remove camera"
             return 1
-        elif [ "$STREAMER" = "uStreamer" ] || [ "$STREAMER" = "mjpg-streamer" ] || [ "$STREAMER" = "camera-streamer" ]; then
+        elif [ "$STREAMER" = "uStreamer" ] || [ "$STREAMER" = "mjpg-streamer" ]; then
             camera_systemctl stop
             camera_systemctl disable
         else

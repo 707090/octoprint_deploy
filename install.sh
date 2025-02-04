@@ -183,9 +183,6 @@ get_installed_streamers() {
     if is_mjpg_streamer_installed; then
         INSTALLED_STREAMERS+=("mjpg-streamer")
     fi
-    if is_camera_streamer_installed; then
-        INSTALLED_STREAMERS+=("camera-streamer")
-    fi
 }
 
 remove_all_cameras_using_streamer() {
@@ -271,38 +268,4 @@ uninstall_mjpg_streamer() {
     systemctl daemon-reload
 
     rm -rf /opt/mjpg_streamer 2>/dev/null
-}
-
-is_camera_streamer_installed() {
-    [ -f "/opt/camera-streamer/camera-streamer" ]
-}
-
-install_camera_streamer() {
-    set -e
-    expect_environment_variables_set SCRIPT_DIR
-    # Remove existing install if present
-    if [ -d /opt/camera-streamer ]; then
-        rm -r /opt/camera-streamer
-    fi
-    #install camera-streamer
-    git -C /opt/ clone https://github.com/ayufan-research/camera-streamer.git --recursive
-    make -C /opt/camera-streamer > /dev/null
-
-    chown -R octavia:octoprinters /opt/camera-streamer/
-
-    cp ${SCRIPT_DIR}/static/octoprint_camera_camera_streamer@.service /etc/systemd/system
-    cp ${SCRIPT_DIR}/static/octoprint_camera_pi_camera_streamer@.service /etc/systemd/system
-    systemctl daemon-reload
-
-    set +e
-}
-
-uninstall_camera_streamer() {
-    remove_all_cameras_using_streamer "camera-streamer"
-
-    rm /etc/systemd/system/octoprint_camera_camera_streamer@.service
-    rm /etc/systemd/system/octoprint_camera_pi_camera_streamer@.service
-    systemctl daemon-reload
-
-    rm -rf /opt/camera_streamer 2>/dev/null
 }
