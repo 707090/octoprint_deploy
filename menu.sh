@@ -9,9 +9,8 @@ yellow=$(echo -en "\e[93m")
 # Expects the instance array to be populated with the instances to select from
 user_select_instance() {
     PS3="$1"
-    CHOICES=${INSTANCE_ARR}
+    CHOICES=(${INSTANCE_ARR[@]})
     if [[ "$2" == true ]]; then
-        #TODO(0): Why are there multiple quits showing up?
         CHOICES+=("Quit")
     fi
     select opt in "${CHOICES[@]}"; do
@@ -27,7 +26,7 @@ user_select_instance() {
 # Expects the camera array to be populated with the cameras to select from
 user_select_camera() {
     PS3="$1"
-    CHOICES=$CAMERA_ARR
+    CHOICES=(${CAMERA_ARR[@]})
     if [[ "$2" == true ]]; then
         CHOICES+=("Quit")
     fi
@@ -55,7 +54,7 @@ user_input_instance_name() {
         fi
 
         if instance_exists; then
-            echo "Already have instance for ${INSTANCE}."
+            echo "Already have instance named ${INSTANCE}."
             main_menu
         fi
         break
@@ -92,7 +91,6 @@ print_tentacles_menu_header() {
                 printf "%-35s: %s\n" "- ${INSTANCE}" ${SYSTEMD_STATUS}
             done 
         fi
-
     fi
     echo "-------------------------------------------------------------"
     echo
@@ -340,10 +338,19 @@ install_tentacles_menu() {
     detect_installs_and_warn
     install_tentacles
 
+
+    cp $SCRIPT_DIR/static/users.yaml /etc/tentacles/users.yaml
+    chown octavia:octoprinters /etc/tentacles/users.yaml
+
+
     echo "The octavia user has been created with a primary group octoprinters."
-    if prompt_confirm "Would you like to join the octoprinters group to have non-sudo access to all the config files?"; then
-        join_octoprinters_group
-    fi
+    join_octoprinters_group
+    echo "You have been added to the \"octoprinters\" system group for access to all Tentacles files"
+
+    echo "OctoPrint servers require a username and password to be set. Please enter a user and password to be the administer account below. If you already have a user set up on an existing instance, then feel free to copy over the users.yaml file from that instance to overwrite the generated /etc/tentacles/users.yaml file after this process."
+    # TODO(0): Use the octoprint_deploy admin-setting script
+    read -r -p "Admin username: " ADMIN_USERNAME
+    read -r -p "Admin password: " ADMIN_PASSWORD
 
     main_menu
 }
@@ -368,7 +375,6 @@ add_instance_menu() {
         echo
         echo "Using a template instance allows you to copy config from one instance to your new instance."
         if prompt_confirm "Use an existing instance as a template?"; then
-            get_instances
             user_select_instance "${cyan}Select template instance: ${white}" true
             echo "Using ${SELECTED} as template."
             sudo -u octavia cp /etc/tentacles/${SELECTED}.yaml /etc/tentacles/${INSTANCE}.yaml
@@ -432,6 +438,7 @@ instance_menu() {
             break
             ;;
         "Remove printer udev rule")
+            #TODO(0): Unimplemented
             remove_printer_udev_rule
             break
             ;;
@@ -583,9 +590,7 @@ add_camera_menu() {
         echo
     fi
 
-    echo "$SERIAL_NUMBER-$TEMPUSBCAM-$BYIDCAM"
     if [ -n "$SERIAL_NUMBER" ]; then
-        echo "adding serial rule"
         add_serial_number_camera_udev_rule
         DEVICE=/dev/$(camera_udev_name)
     elif [ -n "$TEMPUSBCAM" ]; then
@@ -698,7 +703,7 @@ add_printer_udev_menu() {
         echo "Unknown state. Shouldnt be possible to get here."
     fi
 
-    main_menu
+    instance_menu
 }
 
 restore_menu() {

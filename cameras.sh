@@ -105,8 +105,6 @@ add_camera() {
         _add_ustreamer_camera
     elif [[ "${STREAMER}" == "mjpg-streamer" ]]; then
         _add_mjpg_streamer_camera
-    elif [[ "${STREAMER}" == "camera-streamer" ]]; then
-        _add_camera_streamer_camera
     else
         # TODO(3): fatal error
         return 1
@@ -143,11 +141,6 @@ remove_camera() {
     expect_environment_variables_set CAMERA_NAME
     if [ -f /etc/tentacles/${CAMERA_NAME}.env ]; then
         source_camera_env
-
-        # TODO(2): This is kind of a hack to satisfy camera_systemctl, since I am only bothering to set CAMERA_TYPE in the camera-streamer envs since its the only one that it makes a difference. This will break if I add IP cameras.
-        if [ -z "CAMERA_TYPE" ]; then
-            CAMERA_TYPE="usb"
-        fi
 
         if [ -z "$STREAMER" ]; then
             # TODO(2): add fatal_error function which make a big warning screen and closes the program

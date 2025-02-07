@@ -67,7 +67,7 @@ uninstall_octoprint() {
 install_tentacles() {
     set -e
     create_tentacles_user
-    install_octoprint
+    # install_octoprint
 
     _make_permissioned_directory /etc/tentacles/
     _make_permissioned_directory /usr/share/tentacles/
@@ -81,8 +81,6 @@ install_tentacles() {
     sudo -u octavia mkdir /usr/share/tentacles/shared/virtualSd
 
     sudo -u octavia touch /etc/tentacles/users.yaml
-    # TODO(0): Use the octoprint_deploy admin-setting script
-    prompt_confirm "Copy over the user file"
 
     cp ${SCRIPT_DIR}/static/octoprint_server@.service /etc/systemd/system/
     systemctl daemon-reload
@@ -96,15 +94,16 @@ uninstall_tentacles() {
         remove_instance
     done
 
-    if is_haproxy_installed; then
-        uninstall_haproxy
-    fi
-    if is_ustreamer_installed; then
-        uninstall_ustreamer
-    fi
-    if is_mjpg_streamer_installed; then
-        uninstall_mjpg_streamer
-    fi
+    # TODO(0): Reinstate these, commenting to save time testing
+    # if is_haproxy_installed; then
+    #     uninstall_haproxy
+    # fi
+    # if is_ustreamer_installed; then
+    #     uninstall_ustreamer
+    # fi
+    # if is_mjpg_streamer_installed; then
+    #     uninstall_mjpg_streamer
+    # fi
 
 
     rm /etc/systemd/system/octoprint_server@.service
@@ -115,7 +114,7 @@ uninstall_tentacles() {
 
     rm /etc/udev/rules.d/99-octoprint.rules 
 
-    uninstall_octoprint
+    # uninstall_octoprint
     remove_tentacles_user
 }
 
@@ -205,7 +204,7 @@ is_ustreamer_installed() {
 install_ustreamer() {
     set -e
     expect_environment_variables_set SCRIPT_DIR
-    #TODO: add these commands to the log
+    #TODO(3): add these commands to the log
     # Remove existing install if present
     if [ -d /opt/ustreamer ]; then
         rm -r /opt/ustreamer
